@@ -1,75 +1,78 @@
-# Docker Auto-Login & LAN Deployment
+# Docker Auto-Login & Hybrid Deployment (Webhook + Watcher)
 
 ```
-Friend's Laptop
-      │
-      │ git push
-      ▼
-    GitHub
-      │
-      │ auto-sync (auto_sync.py)
-      ▼
-Your Laptop (192.168.1.55)
-      │
-      ├── Python (auto_sync.py polling origin/main)
-      ├── Docker (docker-compose up -d --build)
-      └── Login Website (Flask on port 5000)
-             │
-             │ Wi-Fi / LAN
-             ▼
-       Friend's Browser
-       http://192.168.1.55:5000
+                 GitHub (Punith887/docker-auto-login)
+                 /                                  \
+                /                                    \
+      Webhook (Instant Push)               Watcher (Fail-safe Poller)
+      https://smee.io/wobQBSrxNGXlWOf      Every 10 seconds
+                \                                    /
+                 \                                  /
+                  └───────────────┬────────────────┘
+                                  ▼
+                         YOUR LAPTOP SERVER
+                        (auto_sync.py Daemon)
+                                  │
+                                  ▼
+                        Docker Compose Build
+                     (login-app on Port 5000)
+                                  │
+                             Wi-Fi / LAN
+                                  │
+                   ┌──────────────┼──────────────┐
+                   ▼              ▼              ▼
+                Laptop 1       Laptop 2       Laptop 30
 ```
 
 ---
 
-## 1. Setup on Your Laptop (Host)
+## 1. Webhook URL for Your GitHub Repository
 
-### Step 1: Start Docker Desktop
-Ensure Docker Desktop is running.
+Add this webhook to your GitHub repository:
+- **Direct Webhook Settings Link**:  
+  https://github.com/Punith887/docker-auto-login/settings/hooks/new
 
-### Step 2: Start the Auto-Sync Service
-Run the auto-sync daemon in a terminal:
-```bash
+### Webhook Configuration Details:
+| Field | Value |
+|---|---|
+| **Payload URL** | `https://smee.io/wobQBSrxNGXlWOf` |
+| **Content type** | `application/json` |
+| **Secret** | *(Leave empty)* |
+| **SSL verification** | `Enable SSL verification` |
+| **Which events?** | `Just the push event` (or select `Pushes` and `Pull requests`) |
+| **Active** | Checked `[x]` |
+
+---
+
+## 2. Start the Service on Your Laptop (Host)
+
+Double-click `run_sync.bat` or run:
+```powershell
 python auto_sync.py
 ```
-*(Or double-click `run_sync.bat`)*
 
-This script:
-1. Detects your local Wi-Fi IP (e.g., `192.168.1.55`).
-2. Checks GitHub (`origin/main`) every 5 seconds.
-3. When your friend pushes new code, it automatically pulls changes (`git pull`) and rebuilds the container (`docker compose up -d --build`).
+### What `auto_sync.py` Does:
+1. **Webhook Listener**: Listens to the public Smee stream in real time. The moment code is pushed to GitHub, deployment triggers immediately.
+2. **Local Webhook Receiver**: Listens on `http://localhost:9000/webhook` for local tests or tools.
+3. **Watcher Fail-safe**: Polls GitHub `origin/main` every 10 seconds in case a webhook is missed.
+4. **Auto-Deploy**: Performs `git fetch origin main && git reset --hard origin/main` and runs `docker compose up -d --build`.
 
 ---
 
-## 2. Setup on Friend's Laptop (Developer)
+## 3. Test the Webhook Locally
 
-### Step 1: Clone Repository
-```bash
-git clone https://github.com/Punith887/docker-auto-login.git
-cd docker-auto-login
-```
-
-### Step 2: Make Changes & Push
-Whenever your friend updates code (e.g., modifying `templates/login.html` or `app.py`):
-```bash
-git add .
-git commit -m "Update login page design"
-git push origin main
+To verify deployment without pushing to GitHub, open a separate terminal and run:
+```powershell
+python test_webhook.py
 ```
 
 ---
 
-## 3. Friend's Browser Access
+## 4. LAN Access for Developers
 
-Make sure both laptops are connected to the same **Wi-Fi / LAN network**.
-
-Open any browser and navigate to:
-```
+All developers on your Wi-Fi network open:
+```text
 http://192.168.1.55:5000
 ```
-
-- Login credentials:
-  - **Username**: `admin`
-  - **Password**: `1234`
-- Health check: `http://192.168.1.55:5000/health`
+- **Health Check**: `http://192.168.1.55:5000/health`
+- **Default Credentials**: `admin` / `1234`
