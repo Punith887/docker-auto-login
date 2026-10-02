@@ -1,0 +1,12 @@
+services:
+
+  login-app:
+
+    build: .
+
+    container_name: login-app
+
+    ports:
+      - "5000:5000"
+
+    restart: unless-stopped
